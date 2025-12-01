@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão Bateria 10.0 (Acesso Público)</title>
+    <title>Gestão Bateria 12.0 (Público Real-Time)</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -156,7 +156,7 @@
         /* Cores Ativas */
         .opt-p.active { background: var(--success); color: white; border-color: var(--success); }
         .opt-f.active { background: var(--danger); color: white; border-color: var(--danger); }
-        .opt-j.active { background: var(--warning); color: #333; border-color: var(--warning); }
+        .opt-j.active { background: var(--info); color: white; border-color: var(--info); }
         .opt-mb.active { background: #27ae60; color: white; }
         .opt-b.active { background: #2980b9; color: white; }
         .opt-r.active { background: #f39c12; color: white; }
@@ -219,7 +219,7 @@
     <div id="loading-overlay">
         <div class="spinner"></div>
         <p>Conectando ao Firebase...</p>
-        <p id="auth-status-display" style="font-size:0.9rem; margin-top:5px;"></p>
+        <p id="auth-status-display" style="font-size:0.9rem; margin-top:5px;">Acesso totalmente aberto.</p>
     </div>
 
     <nav>
@@ -252,7 +252,7 @@
 
         <div id="avaliacao" class="tab-content">
             <h2>Passo 2: Avaliar Aula Hoje</h2>
-            <p style="color: #666; font-size: 0.9rem;">Mostrando apenas alunos marcados com <b>PRESENÇA</b> nesta sessão.</p>
+            <p style="color: #666; font-size: 0.9rem;">Mostrando apenas alunos marcados com <b>PRESENÇA</b> nesta sessão (Atualização em tempo real).</p>
             
             <div id="avaliacao-list">
                 </div>
@@ -335,7 +335,7 @@
 
         <div id="cadastro" class="tab-content">
             <h2>Cadastrar Aluno</h2>
-            <p style="font-size:0.8rem; color:var(--info);">⚠️ **Aviso:** Esta coleção é pública. Os dados não são privados.</p>
+            <p style="font-size:0.8rem; color:var(--danger);">⚠️ **Aviso:** Esta coleção é pública. Os dados não são privados e qualquer usuário pode editá-los.</p>
             <form onsubmit="registerStudent(event)">
                 <label>Nome:</label>
                 <input type="text" id="reg-name" required>
@@ -365,9 +365,10 @@
     <script type="module">
         // Importa as funções necessárias do Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-        // Voltando ao Anonymous Auth para gerar um UID, mas as regras abertas garantem o acesso
+        // Usa signInAnonymously (apenas para obter um token de acesso)
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, setLogLevel } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+        // Adiciona 'setDoc' para salvar os dados da sessão em tempo real
+        import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
         // CONFIGURAÇÃO DO FIREBASE (FIXA)
         const firebaseConfig = {
@@ -382,11 +383,14 @@
 
         // --- Variáveis Globais do Aplicativo ---
         let students = []; 
-        let sessionData = {}; 
+        let sessionData = {}; // Variável local sincronizada em tempo real com o Firestore
         let currentChurchFilter = '';
         
-        let db, auth, studentCollectionRef;
-        let userId = 'PUBLIC_COLLECTION'; // UID fixo para a coleção pública
+        let db, auth;
+        let studentCollectionRef; // Coleção PERMANENTE (pública)
+        let sessionCollectionRef; // Coleção TEMPORÁRIA (pública e real-time)
+
+        let userId = null; // UID será anônimo e irrelevante
         let isAuthReady = false;
 
         setLogLevel('Debug');
@@ -407,31 +411,33 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                setConnectionStatus('Autenticando anonimamente...');
+                setConnectionStatus('Conectando (Acesso Anônimo)...');
                 
-                // Login anônimo para gerar um token e usar o Firestore
-                await signInAnonymously(auth);
+                // Login anônimo (dá um token básico para acesso ao Firestore)
+                await signInAnonymously(auth); 
 
+                // Define as referências para as coleções FIXAS/PÚBLICAS
+                studentCollectionRef = collection(db, 'students_public'); 
+                sessionCollectionRef = collection(db, 'session_data');
+                
                 onAuthStateChanged(auth, (user) => {
-                    // O UID gerado anonimamente não importa, mas o usaremos
-                    // para construir um caminho de coleção único e simples.
-                    
-                    const appId = firebaseConfig.projectId; 
-                    
-                    // Com regras abertas, usaremos uma coleção fixa e fácil de gerenciar
-                    // O caminho da coleção NÃO É MAIS dependente do UID
-                    const collectionPath = `artifacts/${appId}/students_public`; 
-                    studentCollectionRef = collection(db, collectionPath);
-                    
-                    isAuthReady = true; 
+                    if (user) {
+                        userId = user.uid; // O UID é temporário, mas serve para o token.
+                        isAuthReady = true;
 
-                    if (document.getElementById('display-user-id')) {
-                        document.getElementById('display-user-id').textContent = 'Acesso Público';
+                        const displayElement = document.getElementById('display-user-id');
+                        if (displayElement) displayElement.textContent = 'Acesso Público Total';
+
+                        setConnectionStatus(`Conectado. Acesso Público.`, 'connected');
+                        
+                        listenToStudents();
+                        listenToSessionUpdates(); // Escuta as mudanças da presença em tempo real
+
+                    } else {
+                        userId = null;
+                        isAuthReady = false;
+                        setConnectionStatus('Desconectado. Falha na autenticação anônima.', 'error');
                     }
-                    setConnectionStatus(`Conectado. Acesso Público.`, 'connected');
-                    
-                    listenToStudents();
-
                     const loadingOverlay = document.getElementById('loading-overlay');
                     if (loadingOverlay) loadingOverlay.style.display = 'none';
                 });
@@ -440,13 +446,37 @@
                 console.error("Erro no setup do Firebase:", error);
                 const loadingOverlay = document.getElementById('loading-overlay');
                 if (loadingOverlay) loadingOverlay.style.display = 'none';
-                setConnectionStatus(`Falha Crítica: ${error.code || error.message}.`, 'error');
+                setConnectionStatus(`Falha Crítica na Conexão: ${error.code || error.message}.`, 'error');
             }
         }
 
+        // --- Sincronização em Tempo Real da Sessão ---
+        function listenToSessionUpdates() {
+            // Documento fixo 'current_class' armazena o estado temporário da aula
+            const sessionDocRef = doc(sessionCollectionRef, 'current_class');
+
+            onSnapshot(sessionDocRef, (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    sessionData = docSnapshot.data() || {}; 
+                    console.log("Sessão atualizada em tempo real:", sessionData);
+                    
+                    // Re-renderiza as abas afetadas
+                    if(document.getElementById('chamada')?.classList.contains('active')) renderCallList();
+                    if(document.getElementById('avaliacao')?.classList.contains('active')) renderEvalList();
+                } else {
+                    console.log("Documento de sessão não existe.");
+                    sessionData = {}; 
+                }
+            }, (error) => {
+                console.error("Erro ao escutar a sessão (Regras abertas devem resolver):", error);
+            });
+        }
+
+
+        // --- Leitura dos Alunos (Real-Time) ---
         function listenToStudents() {
             if (!studentCollectionRef) {
-                console.error("Referência da coleção não definida.");
+                console.error("Referência da coleção de alunos não definida.");
                 return;
             }
             onSnapshot(studentCollectionRef, (snapshot) => {
@@ -459,8 +489,8 @@
                 console.log("Dados de alunos atualizados via Firestore:", students.length);
 
             }, (error) => {
-                console.error("Erro ao escutar a coleção de alunos (Verifique Regras):", error);
-                setConnectionStatus("Erro de sincronização de dados. Permissão Negada?", 'error');
+                console.error("Erro ao escutar a coleção de alunos:", error);
+                setConnectionStatus("Erro de sincronização de dados.", 'error');
             });
         }
         
@@ -519,7 +549,7 @@
             }
         }
 
-        // --- Chamada e Avaliação (Lógica de Sessão) ---
+        // --- Chamada e Avaliação (Lógica de Sessão em Tempo Real) ---
         function filterChurchCall(church, btn) {
             currentChurchFilter = church;
             document.querySelectorAll('.church-btn').forEach(b => b.classList.remove('selected'));
@@ -562,13 +592,29 @@
             });
         }
 
-        function setSession(id, field, value) {
+        // NOVO: A função setSession agora salva diretamente no Firebase (em tempo real)
+        async function setSession(id, field, value) {
+            if (!sessionCollectionRef) return alert('Aguarde a conexão com o banco de dados.');
+            
+            // Atualiza a variável local (sessionData)
             if(!sessionData[id]) sessionData[id] = {};
             sessionData[id][field] = value;
             
-            if(document.getElementById('chamada')?.classList.contains('active')) renderCallList();
-            if(document.getElementById('avaliacao')?.classList.contains('active')) renderEvalList();
+            // 1. Prepara os dados para salvar no documento fixo 'current_class'
+            const dataToSave = { ...sessionData };
+
+            // 2. Salva no Firestore usando setDoc com merge: true
+            try {
+                const sessionDocRef = doc(sessionCollectionRef, 'current_class');
+                await setDoc(sessionDocRef, dataToSave, { merge: true });
+                console.log(`Status de ${id} atualizado no tempo real.`);
+            } catch (error) {
+                console.error("Erro ao sincronizar status em tempo real:", error);
+                alert("Falha ao sincronizar. Verifique a conexão/regras.");
+            }
+            // A UI é atualizada automaticamente pela função listenToSessionUpdates (realtime)
         }
+
 
         function goToEvaluation() {
             const hasPresent = Object.values(sessionData).some(d => d.status === 'P');
@@ -597,6 +643,7 @@
             }
 
             presentStudents.forEach(s => {
+                // A performance é lida da sessionData (que está sincronizada em tempo real)
                 const currentPerf = sessionData[s.id]?.perf || '';
 
                 const div = document.createElement('div');
@@ -640,6 +687,7 @@
                         ? [...student.history, newHistoryEntry] 
                         : [newHistoryEntry];
                     
+                    // Atualiza o histórico na coleção pública students_public
                     const studentDocRef = doc(db, studentCollectionRef.path, docId);
                     updates.push(updateDoc(studentDocRef, { history: updatedHistory }));
                 }
@@ -652,13 +700,17 @@
 
             try {
                 await Promise.all(updates);
-                alert(`Aula salva com sucesso para ${updates.length} alunos no Firestore!`);
+                alert(`Aula salva com sucesso para ${updates.length} alunos!`);
                 
+                // NOVO: Limpa o estado da sessão temporária para a próxima aula
+                const sessionDocRef = doc(sessionCollectionRef, 'current_class');
+                await setDoc(sessionDocRef, {}, { merge: false });
+
                 sessionData = {};
                 showTab('chamada');
             } catch (error) {
-                console.error("Erro ao salvar dados da aula (Verifique Regras):", error);
-                alert('Erro ao salvar dados da aula. Verifique o console. (Pode ser erro de permissão)');
+                console.error("Erro ao salvar dados da aula:", error);
+                alert('Erro ao salvar dados da aula. Verifique o console. (Permissão deve estar OK devido às regras abertas)');
             }
         }
 

@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão Bateria 9.0 (Firebase OK)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --accent: #e67e22;
+            --success: #27ae60;
+            --danger: #c0392b;
+            --info: #2980b9;
+            --light: #f8f9fa;
+            --dark: #343a40;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            background-color: #eef2f3;
+            color: var(--dark);
+            padding-bottom: 50px;
+        }
+
+        /* --- Global Loading Indicator --- */
+        #loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(44, 62, 80, 0.95);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            font-size: 1.2rem;
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid var(--accent);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+
+        /* --- Navegação --- */
+        nav {
+            background-color: var(--primary);
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        nav button {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #ddd;
+            padding: 10px 15px;
+            cursor: pointer;
+            font-weight: 500;
+            border-radius: 6px;
+            transition: 0.3s;
+            font-size: 0.85rem;
+        }
+
+        nav button.active {
+            background-color: var(--accent);
+            color: white;
+            font-weight: 700;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        /* --- Layout --- */
+        .container {
+            max-width: 1000px;
+            margin: 20px auto;
+            padding: 0 15px;
+        }
+
+        .tab-content { display: none; animation: slideUp 0.4s; }
+        .tab-content.active { display: block; }
+        @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        h2 { color: var(--primary); border-left: 5px solid var(--accent); padding-left: 10px; margin-bottom: 20px; }
+
+        /* --- Botões e Inputs --- */
+        .btn-primary {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #d35400;
+            transition: 0.2s;
+            margin-top: 20px;
+        }
+        .btn-primary:active { transform: translateY(4px); box-shadow: none; }
+        .btn-info {
+            background-color: var(--info);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: 0.2s;
+        }
+        .btn-info:hover { background-color: #20638f; }
+        
+        .btn-next { background-color: var(--info); box-shadow: 0 4px 0 #20638f; }
+
+        input, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
+
+        /* --- Filtros e Seletores de Igreja --- */
+        .filter-row {
+            display: flex; gap: 15px; background: var(--light); padding: 15px; border-radius: 10px; margin-bottom: 20px; align-items: flex-end; flex-wrap: wrap;
+        }
+        .filter-group { flex: 1; min-width: 150px; }
+        .church-selector { display: flex; gap: 10px; margin-bottom: 20px; }
+        .church-btn {
+            flex: 1; padding: 15px; background: white; border: 2px solid #e0e0e0;
+            border-radius: 10px; cursor: pointer; font-weight: bold; color: #777;
+        }
+        .church-btn.selected { border-color: var(--accent); color: var(--accent); background: #fff5eb; }
+
+        /* --- Cards de Alunos --- */
+        .student-card {
+            background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 10px;
+        }
+        .student-header { display: flex; justify-content: space-between; align-items: center; }
+        .student-name { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
+        .btn-group { display: flex; gap: 5px; }
+        .option-btn {
+            flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px;
+            background: #fff; cursor: pointer; font-weight: 600; font-size: 0.9rem;
+        }
+
+        /* Cores Ativas */
+        .opt-p.active { background: var(--success); color: white; border-color: var(--success); }
+        .opt-f.active { background: var(--danger); color: white; border-color: var(--danger); }
+        .opt-j.active { background: var(--warning); color: #333; border-color: var(--warning); }
+        .opt-mb.active { background: #27ae60; color: white; }
+        .opt-b.active { background: #2980b9; color: white; }
+        .opt-r.active { background: #f39c12; color: white; }
+        .opt-ru.active { background: #c0392b; color: white; }
+
+        /* --- Relatório de Grupos --- */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+        .group-column {
+            background: white; border-radius: 10px; padding: 0; box-shadow: 0 5px 15px rgba(0,0,0,0.08); overflow: hidden; min-height: 200px;
+        }
+        .group-header {
+            font-weight: 700; text-transform: uppercase; padding: 15px 15px; margin-bottom: 0; text-align: center; color: white; font-size: 1rem; letter-spacing: 0.5px;
+        }
+        .header-mb { background-color: #27ae60; }
+        .header-b { background-color: #2980b9; }
+        .header-r { background-color: #f39c12; }
+        .header-ru { background-color: #c0392b; }
+        .group-content { padding: 15px; }
+        .group-card-mini {
+            background: var(--light); padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid; transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .badge-avg { 
+            font-weight: 700; padding: 4px 8px; border-radius: 4px; color: white; font-size: 0.9rem; 
+        }
+
+        /* --- Tabela Histórico e Detalhes --- */
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: var(--primary); color: white; }
+        .row-alert { background-color: #fadbd8; }
+        
+        .details-row td { padding: 15px; background: #f9f9f9; border-bottom: 3px solid var(--accent); }
+        .details-row table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+        .details-row th, .details-row td { padding: 8px; text-align: left; border-bottom: 1px dotted #ddd; }
+        .details-row th { background: #e0e0e0; }
+
+        /* --- Footer com Status da Conexão --- */
+        #connection-status {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 8px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: white;
+            background-color: var(--primary);
+            z-index: 500;
+        }
+        #connection-status.connected { background-color: var(--success); }
+        #connection-status.error { background-color: var(--danger); }
+    </style>
+</head>
+<body>
+
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p>Conectando ao Firebase...</p>
+        <p id="auth-status-display" style="font-size:0.9rem; margin-top:5px;"></p>
+    </div>
+
+    <nav>
+        <button onclick="showTab('chamada')" class="active" id="nav-chamada">1. Chamada</button>
+        <button onclick="showTab('avaliacao')" id="nav-avaliacao">2. Avaliação (Aula)</button>
+        <button onclick="showTab('relatorio')" id="nav-relatorio">🏆 Grupos</button>
+        <button onclick="showTab('historico')" id="nav-historico">📊 Histórico</button>
+        <button onclick="showTab('cadastro')" id="nav-cadastro">👤 Cadastro</button>
+    </nav>
+
+    <div class="container">
+
+        <div id="chamada" class="tab-content active">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2>Passo 1: Chamada</h2>
+                <input type="date" id="dataAtual" style="width: auto; padding: 5px;">
+            </div>
+
+            <div class="church-selector">
+                <button class="church-btn" onclick="filterChurchCall('Vila Ildemar', this)">🏰 Vila Ildemar</button>
+                <button class="church-btn" onclick="filterChurchCall('Centro', this)">⛪ Centro</button>
+            </div>
+
+            <div id="chamada-list">
+                <p style="text-align: center; color: #777; margin-top: 30px;">Selecione uma igreja e aguarde o carregamento dos dados.</p>
+            </div>
+
+            <button class="btn-primary btn-next" onclick="goToEvaluation()">PRÓXIMO: AVALIAR DESENVOLVIMENTO ➔</button>
+        </div>
+
+        <div id="avaliacao" class="tab-content">
+            <h2>Passo 2: Avaliar Aula Hoje</h2>
+            <p style="color: #666; font-size: 0.9rem;">Mostrando apenas alunos marcados com <b>PRESENÇA</b> nesta sessão.</p>
+            
+            <div id="avaliacao-list">
+                </div>
+
+            <button class="btn-primary" style="background-color: var(--success);" onclick="saveAllData()">💾 FINALIZAR AULA E SALVAR TUDO</button>
+        </div>
+
+        <div id="relatorio" class="tab-content">
+            <h2>Grupos por Nível (Média Geral)</h2>
+            <div style="margin-bottom: 15px;">
+                <select id="filterReportChurch" onchange="renderGroups()" style="width: auto;">
+                    <option value="todos">Todas as Igrejas</option>
+                    <option value="Vila Ildemar">Vila Ildemar</option>
+                    <option value="Centro">Centro</option>
+                </select>
+            </div>
+
+            <div class="dashboard-grid">
+                
+                <div class="group-column">
+                    <div class="group-header header-mb">💎 Destaques (9.0+)</div>
+                    <div id="group-mb" class="group-content"></div>
+                </div>
+
+                <div class="group-column">
+                    <div class="group-header header-b">🚀 Bom Ritmo (7.0 - 8.9)</div>
+                    <div id="group-b" class="group-content"></div>
+                </div>
+
+                <div class="group-column">
+                    <div class="group-header header-r">🔨 Em Evolução (5.0 - 6.9)</div>
+                    <div id="group-r" class="group-content"></div>
+                </div>
+
+                <div class="group-column">
+                    <div class="group-header header-ru">⚠️ Atenção (< 5.0)</div>
+                    <div id="group-ru" class="group-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="historico" class="tab-content">
+            <h2>Histórico de Faltas e Detalhes</h2>
+            
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label>Buscar Aluno:</label>
+                    <input type="text" id="searchHistory" placeholder="Digite o nome..." onkeyup="renderHistory()">
+                </div>
+                <div class="filter-group">
+                    <label>Filtrar Igreja:</label>
+                    <select id="filterHistoryChurch" onchange="renderHistory()">
+                        <option value="todos">Todas as Igrejas</option>
+                        <option value="Vila Ildemar">Vila Ildemar</option>
+                        <option value="Centro">Centro</option>
+                    </select>
+                </div>
+                <div class="filter-group" style="min-width: auto; align-self: center; padding-bottom: 5px;">
+                    <label style="cursor: pointer;">
+                        <input type="checkbox" id="sortDesc" onchange="renderHistory()"> **Ordenar: Quem mais faltou**
+                    </label>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Igreja</th>
+                        <th>Idade</th>
+                        <th>Sexo</th>
+                        <th>Faltas</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="history-body"></tbody>
+            </table>
+        </div>
+
+        <div id="cadastro" class="tab-content">
+            <h2>Cadastrar Aluno</h2>
+            <p style="font-size:0.8rem; color:var(--info);">Seu ID de Usuário: <b id="display-user-id">Carregando...</b></p>
+            <form onsubmit="registerStudent(event)">
+                <label>Nome:</label>
+                <input type="text" id="reg-name" required>
+                
+                <label>Idade:</label>
+                <input type="number" id="reg-age" required>
+                
+                <label>Sexo:</label>
+                <select id="reg-sex" required>
+                    <option value="M">Masculino</option>
+                    <option value="F">Feminino</option>
+                </select>
+                
+                <label>Igreja:</label>
+                <select id="reg-church">
+                    <option value="Vila Ildemar">Vila Ildemar</option>
+                    <option value="Centro">Centro</option>
+                </select>
+                <button type="submit" class="btn-primary">Salvar Cadastro</button>
+            </form>
+        </div>
+
+    </div>
+    
+    <div id="connection-status">Aguardando conexão com o Firebase...</div>
+
+    <script type="module">
+        // Importa as funções necessárias do Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, setLogLevel } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+        // CONFIGURAÇÃO DO FIREBASE (FIXA)
+        // Resolvendo o erro 'invalid-api-key' por usar a configuração diretamente.
+        const firebaseConfig = {
+            apiKey: "AIzaSyBi28c7g2ShKrmJCpfIOnpjsXunqZv5KGI",
+            authDomain: "aula-de-bateria.firebaseapp.com",
+            projectId: "aula-de-bateria",
+            storageBucket: "aula-de-bateria.firebasestorage.app",
+            messagingSenderId: "759017864636",
+            appId: "1:759017864636:web:d45a5bb698355de6753fb9",
+            measurementId: "G-973PF3KL86"
+        };
+
+        // --- Variáveis Globais do Aplicativo ---
+        let students = []; 
+        let sessionData = {}; 
+        let currentChurchFilter = '';
+        
+        let db, auth, studentCollectionRef;
+        let userId = null;
+        let isAuthReady = false;
+
+        setLogLevel('Debug');
+        
+        // --- Setup e Conexão Firebase ---
+        function setConnectionStatus(message, className = '') {
+            const statusElement = document.getElementById('connection-status');
+            if (statusElement) {
+                statusElement.textContent = message;
+                statusElement.className = '';
+                if (className) statusElement.classList.add(className);
+            }
+        }
+
+        async function initFirebaseAndLoadData() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                setConnectionStatus('Autenticando...');
+                
+                await signInAnonymously(auth);
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        if (document.getElementById('display-user-id')) {
+                            document.getElementById('display-user-id').textContent = userId;
+                        }
+                        setConnectionStatus(`Conectado. Usuário ID: ${userId}`, 'connected');
+                        
+                        const appId = firebaseConfig.projectId; 
+                        const collectionPath = `artifacts/${appId}/users/${userId}/students`;
+                        studentCollectionRef = collection(db, collectionPath);
+                        
+                        listenToStudents();
+
+                    } else {
+                        userId = null;
+                        isAuthReady = false;
+                        const loadingOverlay = document.getElementById('loading-overlay');
+                        if (loadingOverlay) loadingOverlay.style.display = 'none';
+                        setConnectionStatus('Desconectado. Recarregue a página.', 'error');
+                    }
+                });
+
+            } catch (error) {
+                console.error("Erro no setup do Firebase:", error);
+                const loadingOverlay = document.getElementById('loading-overlay');
+                if (loadingOverlay) loadingOverlay.style.display = 'none';
+                setConnectionStatus(`Falha Crítica: ${error.code || error.message}.`, 'error');
+            }
+        }
+
+        function listenToStudents() {
+            onSnapshot(studentCollectionRef, (snapshot) => {
+                students = [];
+                snapshot.forEach(doc => {
+                    students.push({ id: doc.id, ...doc.data() });
+                });
+                
+                updateUIBasedOnData();
+                const loadingOverlay = document.getElementById('loading-overlay');
+                if (loadingOverlay) loadingOverlay.style.display = 'none';
+                console.log("Dados de alunos atualizados via Firestore:", students.length);
+
+            }, (error) => {
+                console.error("Erro ao escutar a coleção de alunos:", error);
+                setConnectionStatus("Erro de sincronização de dados. Permissão Negada?", 'error');
+            });
+        }
+        
+        function updateUIBasedOnData() {
+            const activeTabElement = document.querySelector('.tab-content.active');
+            if (!activeTabElement) return;
+
+            const activeTabId = activeTabElement.id;
+            
+            if (activeTabId === 'chamada') {
+                renderCallList();
+            } else if (activeTabId === 'avaliacao') {
+                renderEvalList();
+            } else if (activeTabId === 'relatorio') {
+                renderGroups();
+            } else if (activeTabId === 'historico') {
+                renderHistory();
+            }
+        }
+
+
+        // --- Funções de Navegação e UI ---
+        function showTab(id) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+            
+            const tab = document.getElementById(id);
+            const navBtn = document.getElementById('nav-' + id);
+            
+            if (tab) tab.classList.add('active');
+            if (navBtn) navBtn.classList.add('active');
+
+            if(isAuthReady) updateUIBasedOnData();
+        }
+
+        // --- Cadastro (FIRESTORE) ---
+        async function registerStudent(e) {
+            e.preventDefault();
+            if (!studentCollectionRef) return alert('Aguarde a conexão com o banco de dados.');
+
+            const newStudentData = {
+                name: document.getElementById('reg-name').value,
+                age: parseInt(document.getElementById('reg-age').value),
+                sex: document.getElementById('reg-sex').value,
+                church: document.getElementById('reg-church').value,
+                history: []
+            };
+            
+            try {
+                await addDoc(studentCollectionRef, newStudentData);
+                alert('Aluno cadastrado com sucesso e salvo no Firestore!');
+                e.target.reset();
+            } catch (error) {
+                console.error("Erro ao cadastrar aluno:", error);
+                alert('Erro ao cadastrar aluno. Verifique o console.');
+            }
+        }
+
+        // --- Chamada e Avaliação (Lógica de Sessão) ---
+        function filterChurchCall(church, btn) {
+            currentChurchFilter = church;
+            document.querySelectorAll('.church-btn').forEach(b => b.classList.remove('selected'));
+            if (btn) btn.classList.add('selected');
+            renderCallList();
+        }
+
+        function renderCallList() {
+            const list = document.getElementById('chamada-list');
+            if (!list) return;
+
+            list.innerHTML = '';
+            
+            const filtered = students.filter(s => currentChurchFilter === '' || s.church === currentChurchFilter);
+            
+            if(currentChurchFilter === '') {
+                 list.innerHTML = `<p style="text-align:center; padding:20px; color:#777;">Selecione uma igreja para fazer a chamada.</p>`; return;
+            }
+
+            if(filtered.length === 0) {
+                list.innerHTML = `<p style="text-align:center; padding:20px; color:#777;">Sem alunos cadastrados em ${currentChurchFilter}.</p>`; return;
+            }
+
+            filtered.forEach(s => {
+                const currentStatus = sessionData[s.id]?.status || '';
+
+                const div = document.createElement('div');
+                div.className = 'student-card';
+                div.innerHTML = `
+                    <div class="student-header">
+                        <span class="student-name">${s.name}</span>
+                    </div>
+                    <div class="btn-group">
+                        <button class="option-btn opt-p ${currentStatus === 'P' ? 'active' : ''}" onclick="setSession('${s.id}', 'status', 'P')">Presença</button>
+                        <button class="option-btn opt-f ${currentStatus === 'F' ? 'active' : ''}" onclick="setSession('${s.id}', 'status', 'F')">Falta</button>
+                        <button class="option-btn opt-j ${currentStatus === 'J' ? 'active' : ''}" onclick="setSession('${s.id}', 'status', 'J')">Justificada</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function setSession(id, field, value) {
+            if(!sessionData[id]) sessionData[id] = {};
+            sessionData[id][field] = value;
+            
+            if(document.getElementById('chamada')?.classList.contains('active')) renderCallList();
+            if(document.getElementById('avaliacao')?.classList.contains('active')) renderEvalList();
+        }
+
+        function goToEvaluation() {
+            const hasPresent = Object.values(sessionData).some(d => d.status === 'P');
+            if(!hasPresent) {
+                alert("Marque 'Presença' para pelo menos um aluno antes de avaliar.");
+                return;
+            }
+            renderEvalList();
+            showTab('avaliacao');
+        }
+
+        function renderEvalList() {
+            const list = document.getElementById('avaliacao-list');
+            if (!list) return;
+
+            list.innerHTML = '';
+
+            const presentStudents = students.filter(s => 
+                s.church === currentChurchFilter && 
+                sessionData[s.id]?.status === 'P'
+            );
+
+            if(presentStudents.length === 0) {
+                list.innerHTML = '<p style="text-align:center;">Nenhum aluno presente para avaliar.</p>';
+                return;
+            }
+
+            presentStudents.forEach(s => {
+                const currentPerf = sessionData[s.id]?.perf || '';
+
+                const div = document.createElement('div');
+                div.className = 'student-card';
+                div.innerHTML = `
+                    <div class="student-header">
+                        <span class="student-name">${s.name}</span>
+                    </div>
+                    <div style="font-size:0.85rem; margin-bottom:5px; color:#555;">Como foi a aula hoje?</div>
+                    <div class="btn-group">
+                        <button class="option-btn opt-mb ${currentPerf === 'MB' ? 'active' : ''}" onclick="setSession('${s.id}', 'perf', 'MB')">Muito Bom</button>
+                        <button class="option-btn opt-b ${currentPerf === 'B' ? 'active' : ''}" onclick="setSession('${s.id}', 'perf', 'B')">Bom</button>
+                        <button class="option-btn opt-r ${currentPerf === 'R' ? 'active' : ''}" onclick="setSession('${s.id}', 'perf', 'R')">Regular</button>
+                        <button class="option-btn opt-ru ${currentPerf === 'Ru' ? 'active' : ''}" onclick="setSession('${s.id}', 'perf', 'Ru')">Ruim</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        // --- SALVAR DADOS (FIRESTORE) ---
+        async function saveAllData() {
+            if (!studentCollectionRef) return alert('Aguarde a conexão com o banco de dados.');
+            
+            const dateElement = document.getElementById('dataAtual');
+            const date = dateElement ? dateElement.value : new Date().toISOString().split('T')[0];
+
+            let updates = []; 
+
+            for(const [docId, data] of Object.entries(sessionData)) {
+                const student = students.find(s => s.id === docId);
+
+                if (student && data.status) {
+                    const newHistoryEntry = {
+                        date: date,
+                        status: data.status,
+                        performance: data.status === 'P' ? (data.perf || 'N/A') : 'N/A'
+                    };
+                    
+                    const updatedHistory = Array.isArray(student.history) 
+                        ? [...student.history, newHistoryEntry] 
+                        : [newHistoryEntry];
+                    
+                    const studentDocRef = doc(db, studentCollectionRef.path, docId);
+                    updates.push(updateDoc(studentDocRef, { history: updatedHistory }));
+                }
+            }
+
+            if (updates.length === 0) { 
+                alert("Nada para salvar. Marque presença e notas antes de finalizar."); 
+                return; 
+            }
+
+            try {
+                await Promise.all(updates);
+                alert(`Aula salva com sucesso para ${updates.length} alunos no Firestore!`);
+                
+                sessionData = {};
+                showTab('chamada');
+            } catch (error) {
+                console.error("Erro ao salvar dados da aula:", error);
+                alert('Erro ao salvar dados da aula. Verifique o console. (Pode ser erro de permissão)');
+            }
+        }
+
+        // --- Relatório de Grupos ---
+        function renderGroups() {
+            ['group-mb', 'group-b', 'group-r', 'group-ru'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.innerHTML = '';
+            });
+            
+            const filterEl = document.getElementById('filterReportChurch');
+            const filterChurch = filterEl ? filterEl.value : 'todos';
+            const scores = { 'MB': 10, 'B': 7.5, 'R': 5, 'Ru': 2.5 };
+            
+            const groupsHTML = { 'mb': [], 'b': [], 'r': [], 'ru': [] };
+
+            students.forEach(s => {
+                if(filterChurch !== 'todos' && s.church !== filterChurch) return;
+
+                let total = 0, valid = 0;
+                const history = Array.isArray(s.history) ? s.history : [];
+                
+                history.forEach(h => {
+                    if(scores[h.performance]) { total += scores[h.performance]; valid++; }
+                });
+                let avg = valid > 0 ? (total/valid) : 0;
+
+                let color = '#7f8c8d'; 
+                let groupId = null;
+
+                if (valid > 0) {
+                     if (avg >= 9.0) { color = '#27ae60'; groupId = 'mb'; }
+                    else if (avg >= 7.0) { color = '#2980b9'; groupId = 'b'; }
+                    else if (avg >= 5.0) { color = '#f39c12'; groupId = 'r'; }
+                    else { color = '#c0392b'; groupId = 'ru'; }
+
+                    const html = `
+                        <div class="group-card-mini" style="border-left-color: ${color};">
+                            <span>${s.name}</span>
+                            <span class="badge-avg" style="background:${color}">${avg.toFixed(1)}</span>
+                        </div>`;
+                    
+                    if (groupId) groupsHTML[groupId].push(html);
+                }
+            });
+            
+            Object.keys(groupsHTML).forEach(key => {
+                const container = document.getElementById(`group-${key}`);
+                if (container) {
+                    if (groupsHTML[key].length > 0) {
+                        container.innerHTML = groupsHTML[key].join('');
+                    } else {
+                        container.innerHTML = '<p style="text-align:center; color:#999; margin-top:10px;">Nenhum aluno neste grupo.</p>';
+                    }
+                }
+            });
+        }
+
+        // --- Histórico (Com Filtros e Detalhes) ---
+        function renderHistory() {
+            const tbody = document.getElementById('history-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            
+            const searchEl = document.getElementById('searchHistory');
+            const term = searchEl ? searchEl.value.toLowerCase() : '';
+            
+            const churchFilterEl = document.getElementById('filterHistoryChurch');
+            const churchFilter = churchFilterEl ? churchFilterEl.value : 'todos';
+            
+            const sortDescEl = document.getElementById('sortDesc');
+            const sortDesc = sortDescEl ? sortDescEl.checked : false;
+
+            let list = students.map(s => {
+                const history = Array.isArray(s.history) ? s.history : [];
+                let faltas = history.filter(h => h.status === 'F').length;
+                return { ...s, faltas, history };
+            });
+
+            list = list.filter(s => s.name.toLowerCase().includes(term));
+            if(churchFilter !== 'todos') {
+                list = list.filter(s => s.church === churchFilter);
+            }
+
+            if(sortDesc) list.sort((a,b) => b.faltas - a.faltas);
+
+            list.forEach(s => {
+                const tr = document.createElement('tr');
+                if(s.faltas >= 2) tr.className = 'row-alert';
+
+                tr.innerHTML = `
+                    <td>${s.name}</td>
+                    <td>${s.church}</td>
+                    <td>${s.age || '-'}</td>
+                    <td>${s.sex || '-'}</td>
+                    <td>${s.faltas}</td>
+                    <td>${s.faltas >= 2 ? '⚠️ Crítico' : 'OK'}</td>
+                    <td><button class="btn-info" onclick="toggleDetails('${s.id}', this)">Ver Detalhes</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- FUNÇÃO PARA MOSTRAR DETALHES ---
+        function toggleDetails(studentId, buttonElement) {
+            const student = students.find(s => s.id === studentId); 
+            if (!student) return;
+
+            const row = buttonElement.closest('tr');
+            const existingDetailsRow = row.nextElementSibling;
+            const COLSPAN_COUNT = 7; 
+
+            if (existingDetailsRow && existingDetailsRow.classList.contains('details-row')) {
+                existingDetailsRow.remove();
+                buttonElement.textContent = 'Ver Detalhes';
+                return;
+            }
+
+            document.querySelectorAll('.details-row').forEach(r => r.remove());
+            document.querySelectorAll('#history-body button').forEach(b => {
+                if (b !== buttonElement) b.textContent = 'Ver Detalhes';
+            });
+
+            let historyHtml = '<table style="width:100%;"><tr><th>Data</th><th>Presença</th><th>Desenvoltura</th></tr>';
+            const history = Array.isArray(student.history) ? student.history : [];
+
+            if (history.length === 0) {
+                historyHtml += `<tr><td colspan="3" style="text-align:center; padding:15px;">Nenhum registro de aula encontrado.</td></tr>`;
+            } else {
+                const sortedHistory = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                sortedHistory.forEach(h => {
+                    const dateObj = new Date(h.date);
+                    const date = isNaN(dateObj) ? h.date : dateObj.toLocaleDateString('pt-BR');
+
+                    const statusMap = { 'P': 'Presença', 'F': 'Falta', 'J': 'Justificada', 'N/A': 'Não marcado' };
+                    const perfMap = { 'MB': 'Muito Bom', 'B': 'Bom', 'R': 'Regular', 'Ru': 'Ruim', 'N/A': 'Sem nota' };
+                    
+                    historyHtml += `
+                        <tr>
+                            <td>${date}</td>
+                            <td>${statusMap[h.status] || h.status}</td>
+                            <td>${perfMap[h.performance] || h.performance}</td>
+                        </tr>
+                    `;
+                });
+            }
+            historyHtml += '</table>';
+
+            const detailsRow = document.createElement('tr');
+            detailsRow.className = 'details-row';
+            detailsRow.innerHTML = `<td colspan="${COLSPAN_COUNT}">
+                <h4 style="margin-top:0; color:var(--primary);">Histórico de Aulas de ${student.name}</h4>
+                ${historyHtml}
+            </td>`;
+
+            row.parentNode.insertBefore(detailsRow, row.nextSibling);
+            buttonElement.textContent = 'Ocultar Detalhes';
+
+            detailsRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // --- EXPORTA AS FUNÇÕES GLOBAIS (CORREÇÃO DO 'is not defined') ---
+        // Torna as funções acessíveis aos atributos 'onclick' do HTML
+        window.showTab = showTab;
+        window.filterChurchCall = filterChurchCall;
+        window.goToEvaluation = goToEvaluation;
+        window.setSession = setSession;
+        window.saveAllData = saveAllData;
+        window.renderGroups = renderGroups;
+        window.renderHistory = renderHistory;
+        window.registerStudent = registerStudent;
+        window.toggleDetails = toggleDetails; 
+        
+        // --- Inicia o aplicativo ---
+        const dataAtualEl = document.getElementById('dataAtual');
+        if (dataAtualEl) dataAtualEl.valueAsDate = new Date();
+
+        initFirebaseAndLoadData();
+
+    </script>
+</body>
+</html>

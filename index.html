@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão Bateria 12.1 (Mobile Friendly)</title>
+    <title>Gestão Bateria 12.2 (Otimização Mobile)</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -53,7 +53,7 @@
         /* --- Navegação --- */
         nav {
             background-color: var(--primary);
-            /* AJUSTE PARA MOBILE: Reduz a altura da barra */
+            /* AJUSTE PARA MOBILE (vertical/horizontal) */
             padding: 8px 5px; 
             display: flex;
             justify-content: center;
@@ -70,7 +70,7 @@
             background: rgba(255,255,255,0.1);
             border: none;
             color: #ddd;
-            /* AJUSTE PARA MOBILE: Reduz o padding dos botões */
+            /* AJUSTE PARA MOBILE (vertical/horizontal) */
             padding: 8px 12px; 
             cursor: pointer;
             font-weight: 500;
@@ -89,7 +89,8 @@
         /* --- Layout --- */
         .container {
             max-width: 1000px;
-            margin: 20px auto;
+            /* AJUSTE MOBILE: Reduz a margem superior para o conteúdo subir */
+            margin: 10px auto; 
             padding: 0 15px;
         }
 
@@ -97,7 +98,13 @@
         .tab-content.active { display: block; }
         @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        h2 { color: var(--primary); border-left: 5px solid var(--accent); padding-left: 10px; margin-bottom: 20px; }
+        h2 { 
+            color: var(--primary); 
+            border-left: 5px solid var(--accent); 
+            padding-left: 10px; 
+            /* AJUSTE MOBILE: Reduz a margem inferior */
+            margin-bottom: 10px; 
+        }
 
         /* --- Botões e Inputs --- */
         .btn-primary {

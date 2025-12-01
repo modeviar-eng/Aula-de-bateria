@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão Bateria 9.0 (Firebase OK)</title>
+    <title>Gestão Bateria 10.0 (Acesso Público)</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -225,7 +225,7 @@
     <nav>
         <button onclick="showTab('chamada')" class="active" id="nav-chamada">1. Chamada</button>
         <button onclick="showTab('avaliacao')" id="nav-avaliacao">2. Avaliação (Aula)</button>
-        <button onclick="showTab('relatorio')" id="nav-relatorio"> Grupos</button>
+        <button onclick="showTab('relatorio')" id="nav-relatorio">🏆 Grupos</button>
         <button onclick="showTab('historico')" id="nav-historico">📊 Histórico</button>
         <button onclick="showTab('cadastro')" id="nav-cadastro">👤 Cadastro</button>
     </nav>
@@ -239,8 +239,8 @@
             </div>
 
             <div class="church-selector">
-                <button class="church-btn" onclick="filterChurchCall('Vila Ildemar', this)"> Vila Ildemar</button>
-                <button class="church-btn" onclick="filterChurchCall('Centro', this)"> Centro</button>
+                <button class="church-btn" onclick="filterChurchCall('Vila Ildemar', this)">🏰 Vila Ildemar</button>
+                <button class="church-btn" onclick="filterChurchCall('Centro', this)">⛪ Centro</button>
             </div>
 
             <div id="chamada-list">
@@ -335,7 +335,7 @@
 
         <div id="cadastro" class="tab-content">
             <h2>Cadastrar Aluno</h2>
-            <p style="font-size:0.8rem; color:var(--info);">Seu ID de Usuário: <b id="display-user-id">Carregando...</b></p>
+            <p style="font-size:0.8rem; color:var(--info);">⚠️ **Aviso:** Esta coleção é pública. Os dados não são privados.</p>
             <form onsubmit="registerStudent(event)">
                 <label>Nome:</label>
                 <input type="text" id="reg-name" required>
@@ -365,11 +365,11 @@
     <script type="module">
         // Importa as funções necessárias do Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+        // Voltando ao Anonymous Auth para gerar um UID, mas as regras abertas garantem o acesso
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
         import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, setLogLevel } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
         // CONFIGURAÇÃO DO FIREBASE (FIXA)
-        // Resolvendo o erro 'invalid-api-key' por usar a configuração diretamente.
         const firebaseConfig = {
             apiKey: "AIzaSyBi28c7g2ShKrmJCpfIOnpjsXunqZv5KGI",
             authDomain: "aula-de-bateria.firebaseapp.com",
@@ -386,7 +386,7 @@
         let currentChurchFilter = '';
         
         let db, auth, studentCollectionRef;
-        let userId = null;
+        let userId = 'PUBLIC_COLLECTION'; // UID fixo para a coleção pública
         let isAuthReady = false;
 
         setLogLevel('Debug');
@@ -407,32 +407,33 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                setConnectionStatus('Autenticando...');
+                setConnectionStatus('Autenticando anonimamente...');
                 
+                // Login anônimo para gerar um token e usar o Firestore
                 await signInAnonymously(auth);
 
                 onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        isAuthReady = true;
-                        if (document.getElementById('display-user-id')) {
-                            document.getElementById('display-user-id').textContent = userId;
-                        }
-                        setConnectionStatus(`Conectado. Usuário ID: ${userId}`, 'connected');
-                        
-                        const appId = firebaseConfig.projectId; 
-                        const collectionPath = `artifacts/${appId}/users/${userId}/students`;
-                        studentCollectionRef = collection(db, collectionPath);
-                        
-                        listenToStudents();
+                    // O UID gerado anonimamente não importa, mas o usaremos
+                    // para construir um caminho de coleção único e simples.
+                    
+                    const appId = firebaseConfig.projectId; 
+                    
+                    // Com regras abertas, usaremos uma coleção fixa e fácil de gerenciar
+                    // O caminho da coleção NÃO É MAIS dependente do UID
+                    const collectionPath = `artifacts/${appId}/students_public`; 
+                    studentCollectionRef = collection(db, collectionPath);
+                    
+                    isAuthReady = true; 
 
-                    } else {
-                        userId = null;
-                        isAuthReady = false;
-                        const loadingOverlay = document.getElementById('loading-overlay');
-                        if (loadingOverlay) loadingOverlay.style.display = 'none';
-                        setConnectionStatus('Desconectado. Recarregue a página.', 'error');
+                    if (document.getElementById('display-user-id')) {
+                        document.getElementById('display-user-id').textContent = 'Acesso Público';
                     }
+                    setConnectionStatus(`Conectado. Acesso Público.`, 'connected');
+                    
+                    listenToStudents();
+
+                    const loadingOverlay = document.getElementById('loading-overlay');
+                    if (loadingOverlay) loadingOverlay.style.display = 'none';
                 });
 
             } catch (error) {
@@ -444,6 +445,10 @@
         }
 
         function listenToStudents() {
+            if (!studentCollectionRef) {
+                console.error("Referência da coleção não definida.");
+                return;
+            }
             onSnapshot(studentCollectionRef, (snapshot) => {
                 students = [];
                 snapshot.forEach(doc => {
@@ -451,12 +456,10 @@
                 });
                 
                 updateUIBasedOnData();
-                const loadingOverlay = document.getElementById('loading-overlay');
-                if (loadingOverlay) loadingOverlay.style.display = 'none';
                 console.log("Dados de alunos atualizados via Firestore:", students.length);
 
             }, (error) => {
-                console.error("Erro ao escutar a coleção de alunos:", error);
+                console.error("Erro ao escutar a coleção de alunos (Verifique Regras):", error);
                 setConnectionStatus("Erro de sincronização de dados. Permissão Negada?", 'error');
             });
         }
@@ -654,7 +657,7 @@
                 sessionData = {};
                 showTab('chamada');
             } catch (error) {
-                console.error("Erro ao salvar dados da aula:", error);
+                console.error("Erro ao salvar dados da aula (Verifique Regras):", error);
                 alert('Erro ao salvar dados da aula. Verifique o console. (Pode ser erro de permissão)');
             }
         }
@@ -818,8 +821,7 @@
             detailsRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
-        // --- EXPORTA AS FUNÇÕES GLOBAIS (CORREÇÃO DO 'is not defined') ---
-        // Torna as funções acessíveis aos atributos 'onclick' do HTML
+        // --- EXPORTA AS FUNÇÕES GLOBAIS ---
         window.showTab = showTab;
         window.filterChurchCall = filterChurchCall;
         window.goToEvaluation = goToEvaluation;
